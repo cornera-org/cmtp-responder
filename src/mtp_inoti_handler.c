@@ -18,8 +18,6 @@
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <sys/stat.h>
-#include <glib.h>
-#include <glib/gprintf.h>
 #include "mtp_thread.h"
 #include "mtp_inoti_handler.h"
 #include "mtp_event_handler.h"

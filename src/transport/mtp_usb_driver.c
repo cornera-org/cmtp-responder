@@ -21,7 +21,11 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <signal.h>
-#include <glib.h>
+#include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
 #include "mtp_usb_driver.h"
 #include "mtp_device.h"
 #include "mtp_descs_strings.h"
@@ -34,7 +38,6 @@
 #include "mtp_event_handler.h"
 #include "mtp_init.h"
 #include <sys/prctl.h>
-#include <systemd/sd-daemon.h>
 
 /*
  * GLOBAL AND EXTERN VARIABLES
@@ -66,6 +69,183 @@ static mtp_int32 __handle_usb_read_err(mtp_int32 err,
 static void __clean_up_msg_queue(void *param);
 static void __handle_control_request(mtp_int32 request);
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+#ifndef O_CLOEXEC
+#define O_CLOEXEC 0
+#endif
+
+#define LISTEN_FDS_START 3
+#define DEFAULT_FFS_PATH "/run/ffs_mtp"
+
+static void __close_fd(int *fd)
+{
+	if (*fd >= 0) {
+		close(*fd);
+		*fd = -1;
+	}
+}
+
+static const char *__get_functionfs_base_path(void)
+{
+	const char *path = getenv("CMTP_FFS_PATH");
+
+	if (path && path[0])
+		return path;
+
+	return DEFAULT_FFS_PATH;
+}
+
+static int __write_all(int fd, const void *buf, size_t len)
+{
+	const char *ptr = (const char *)buf;
+
+	while (len > 0) {
+		ssize_t written = write(fd, ptr, len);
+		if (written < 0) {
+			if (errno == EINTR)
+				continue;
+			return -1;
+		}
+		ptr += written;
+		len -= (size_t)written;
+	}
+	return 0;
+}
+
+static int __open_endpoint(const char *base, const char *name, int flags)
+{
+	char path[PATH_MAX];
+	int ret = snprintf(path, sizeof(path), "%s/%s", base, name);
+
+	if (ret < 0 || ret >= (int)sizeof(path)) {
+		errno = ENAMETOOLONG;
+		return -1;
+	}
+
+	return open(path, flags);
+}
+
+static const char *__errno_to_string(int err, char *buf, size_t buflen)
+{
+#ifdef __GLIBC__
+	const char *msg = strerror_r(err, buf, buflen);
+	return msg ? msg : "unknown error";
+#else
+	if (strerror_r(err, buf, buflen) == 0)
+		return buf;
+	snprintf(buf, buflen, "errno %d", err);
+	return buf;
+#endif
+}
+
+static void __log_errno(const char *msg)
+{
+	char error[256];
+	ERR("%s: %s\n", msg, __errno_to_string(errno, error, sizeof(error)));
+}
+
+static int __inherit_functionfs_descriptors(void)
+{
+	const char *env_fds = getenv("LISTEN_FDS");
+	const char *env_pid = getenv("LISTEN_PID");
+	char *endptr = NULL;
+	long nfds;
+
+	if (!env_fds)
+		return 0;
+
+	if (env_pid && env_pid[0]) {
+		long parsed_pid = strtol(env_pid, &endptr, 10);
+		if (endptr == env_pid || parsed_pid <= 0 ||
+		    (pid_t)parsed_pid != getpid())
+			return 0;
+	}
+
+	errno = 0;
+	endptr = NULL;
+	nfds = strtol(env_fds, &endptr, 10);
+	if (endptr == env_fds || errno != 0)
+		return -1;
+	if (nfds < 0 || nfds > 32)
+		return -1;
+
+	for (long i = 0; i < nfds; ++i) {
+		int fd = LISTEN_FDS_START + (int)i;
+		int flags = fcntl(fd, F_GETFD);
+		if (flags >= 0)
+			(void)fcntl(fd, F_SETFD, flags | FD_CLOEXEC);
+	}
+
+	unsetenv("LISTEN_FDS");
+	unsetenv("LISTEN_PID");
+	unsetenv("LISTEN_FDNAMES");
+
+	return (int)nfds;
+}
+
+static mtp_bool __open_functionfs_endpoints(void)
+{
+	const char *base = __get_functionfs_base_path();
+	int flags = O_RDWR | O_CLOEXEC;
+	int ep0 = -1;
+	int ep_in = -1;
+	int ep_out = -1;
+	int ep_status = -1;
+
+	ep0 = __open_endpoint(base, "ep0", flags);
+	if (ep0 < 0) {
+		__log_errno("Opening FunctionFS ep0 failed");
+		return FALSE;
+	}
+
+	if (__write_all(ep0, &descriptors, sizeof(descriptors)) < 0) {
+		__log_errno("Writing FunctionFS descriptors failed");
+		goto error;
+	}
+
+	if (__write_all(ep0, &strings, sizeof(strings)) < 0) {
+		__log_errno("Writing FunctionFS strings failed");
+		goto error;
+	}
+
+	ep_in = __open_endpoint(base, "ep1", flags);
+	if (ep_in < 0) {
+		__log_errno("Opening FunctionFS ep1 failed");
+		goto error;
+	}
+
+	ep_out = __open_endpoint(base, "ep2", flags);
+	if (ep_out < 0) {
+		__log_errno("Opening FunctionFS ep2 failed");
+		goto error;
+	}
+
+	ep_status = __open_endpoint(base, "ep3", flags);
+	if (ep_status < 0) {
+		__log_errno("Opening FunctionFS ep3 failed");
+		goto error;
+	}
+
+	g_usb_ep0 = ep0;
+	g_usb_ep_in = ep_in;
+	g_usb_ep_out = ep_out;
+	g_usb_ep_status = ep_status;
+
+	DBG("Opened FunctionFS endpoints at %s\n", base);
+
+	return TRUE;
+
+error:
+	__close_fd(&ep_status);
+	__close_fd(&ep_out);
+	__close_fd(&ep_in);
+	__close_fd(&ep0);
+	return FALSE;
+}
+
 /*
  * FUNCTIONS
  */
@@ -73,28 +253,31 @@ static void __handle_control_request(mtp_int32 request);
 /* LCOV_EXCL_START */
 mtp_bool _transport_init_usb_device(void)
 {
-	int n, msg_size;
+	int msg_size;
+	int inherited;
 
-	if (g_usb_ep0 > 0) {
+	if (g_usb_ep0 >= 0) {
 		DBG("Device Already open\n");
 		return TRUE;
 	}
 
-	n = sd_listen_fds(0);
-	if (n < 1) {
-		char error[256];
-		ERR("Inheriting FunctionFS descriptors from systemd failed, errno [%s]\n",
-		    strerror_r(errno, error, sizeof(error)));
+	inherited = __inherit_functionfs_descriptors();
+	if (inherited < 0) {
+		ERR("Failed to read inherited FunctionFS descriptors from environment\n");
 		return FALSE;
-	} else if (n < 4) {
-		ERR("Expected 4 FunctionFS descriptors from systemd but received %d\n", n);
+	} else if (inherited >= 4) {
+		DBG("Using %d inherited FunctionFS descriptors\n", inherited);
+		g_usb_ep0 = LISTEN_FDS_START;
+		g_usb_ep_in = LISTEN_FDS_START + 1;
+		g_usb_ep_out = LISTEN_FDS_START + 2;
+		g_usb_ep_status = LISTEN_FDS_START + 3;
+	} else if (inherited > 0) {
+		ERR("Expected 4 FunctionFS descriptors but received %d\n", inherited);
 		return FALSE;
+	} else {
+		if (__open_functionfs_endpoints() == FALSE)
+			return FALSE;
 	}
-	DBG("socket-activated\n");
-	g_usb_ep0 = SD_LISTEN_FDS_START;
-	g_usb_ep_in = SD_LISTEN_FDS_START + 1;
-	g_usb_ep_out = SD_LISTEN_FDS_START + 2;
-	g_usb_ep_status = SD_LISTEN_FDS_START + 3;
 
 	DBG("Final : Tx pkt size:[%u], Rx pkt size:[%u]\n", g_conf.write_usb_size, g_conf.read_usb_size);
 

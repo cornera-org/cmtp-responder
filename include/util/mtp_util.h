@@ -23,6 +23,7 @@ extern "C" {
 #endif
 
 #include <errno.h>
+#include "util/mtp_gcompat.h"
 #include "mtp_config.h"
 #include "mtp_datatype.h"
 #include "mtp_fs.h"

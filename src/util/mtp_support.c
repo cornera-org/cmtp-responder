@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-#include <glib.h>
-#include <glib/gprintf.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <limits.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 #include "mtp_support.h"
 #include "ptp_datacodes.h"
 #include "mtp_util.h"
@@ -26,6 +29,128 @@
  * STATIC FUNCTIONS
  */
 static mtp_char *__util_conv_int_to_hex_str(mtp_int32 int_val, mtp_char *str);
+static mtp_uint32 __utf16_next_codepoint(const mtp_wchar **cursor);
+static size_t __utf8_encode_codepoint(mtp_uint32 codepoint, char *buf);
+static mtp_uint32 __utf8_next_codepoint(const char **cursor);
+
+static mtp_uint32 __utf16_next_codepoint(const mtp_wchar **cursor)
+{
+	mtp_wchar first;
+
+	if (cursor == NULL || *cursor == NULL)
+		return 0;
+
+	first = **cursor;
+	if (first == 0)
+		return 0;
+
+	(*cursor)++;
+
+	if (first >= 0xD800 && first <= 0xDBFF) {
+		mtp_wchar second = **cursor;
+
+		if (second >= 0xDC00 && second <= 0xDFFF) {
+			(*cursor)++;
+			return 0x10000 + (((first - 0xD800) << 10) |
+					  (second - 0xDC00));
+		}
+
+		return 0xFFFD;
+	}
+
+	if (first >= 0xDC00 && first <= 0xDFFF)
+		return 0xFFFD;
+
+	return first;
+}
+
+static size_t __utf8_encode_codepoint(mtp_uint32 codepoint, char *buf)
+{
+	if (codepoint > 0x10FFFF)
+		codepoint = 0xFFFD;
+
+	if (codepoint <= 0x7F) {
+		buf[0] = (char)codepoint;
+		return 1;
+	} else if (codepoint <= 0x7FF) {
+		buf[0] = (char)(0xC0 | ((codepoint >> 6) & 0x1F));
+		buf[1] = (char)(0x80 | (codepoint & 0x3F));
+		return 2;
+	} else if (codepoint <= 0xFFFF) {
+		buf[0] = (char)(0xE0 | ((codepoint >> 12) & 0x0F));
+		buf[1] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+		buf[2] = (char)(0x80 | (codepoint & 0x3F));
+		return 3;
+	}
+
+	buf[0] = (char)(0xF0 | ((codepoint >> 18) & 0x07));
+	buf[1] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
+	buf[2] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+	buf[3] = (char)(0x80 | (codepoint & 0x3F));
+	return 4;
+}
+
+static mtp_uint32 __utf8_next_codepoint(const char **cursor)
+{
+	const unsigned char *p;
+	const char *start;
+	unsigned char c;
+	mtp_uint32 codepoint = 0;
+	int extra = 0;
+
+	if (cursor == NULL || *cursor == NULL)
+		return 0;
+
+	start = *cursor;
+	p = (const unsigned char *)start;
+	c = *p++;
+
+	if (c == 0)
+		return 0;
+
+	if ((c & 0x80) == 0) {
+		*cursor = (const char *)p;
+		return c;
+	} else if ((c & 0xE0) == 0xC0) {
+		codepoint = c & 0x1F;
+		extra = 1;
+		if (codepoint == 0)
+			goto invalid;
+	} else if ((c & 0xF0) == 0xE0) {
+		codepoint = c & 0x0F;
+		extra = 2;
+	} else if ((c & 0xF8) == 0xF0) {
+		codepoint = c & 0x07;
+		extra = 3;
+	} else {
+		goto invalid;
+	}
+
+	for (int i = 0; i < extra; ++i) {
+		unsigned char cc = *p;
+
+		if ((cc & 0xC0) != 0x80)
+			goto invalid;
+
+		p++;
+		codepoint = (codepoint << 6) | (cc & 0x3F);
+	}
+
+	*cursor = (const char *)p;
+
+	if (codepoint > 0x10FFFF ||
+	    (codepoint >= 0xD800 && codepoint <= 0xDFFF) ||
+	    (extra == 1 && codepoint < 0x80) ||
+	    (extra == 2 && codepoint < 0x800) ||
+	    (extra == 3 && codepoint < 0x10000))
+		return 0xFFFD;
+
+	return codepoint;
+
+invalid:
+	*cursor = start + 1;
+	return 0xFFFD;
+}
 
 /*
  * FUNCTIONS
@@ -75,30 +200,38 @@ void _util_conv_byte_order_gen_str(void *str, mtp_int32 size, mtp_int32 elem_sz)
 mtp_int32 _util_utf16_to_utf8(char *dest, mtp_int32 dest_size,
 		const mtp_wchar *src)
 {
-	gchar *utf8 = NULL;
-	GError *error = NULL;
-	glong items_read = 0;
-	glong items_written = 0;
-	const gunichar2 *utf16 = (const gunichar2 *)src;
+	const mtp_wchar *cursor = src;
+	mtp_int32 written = 0;
+	char *out = dest;
+	size_t remaining;
 
-	retv_if(src == NULL, 0);
 	retv_if(dest == NULL, 0);
+	retv_if(dest_size <= 0, 0);
+	dest[0] = '\0';
+	retv_if(src == NULL, 0);
 
-	utf8 = g_utf16_to_utf8(utf16, -1, &items_read, &items_written, &error);
-	if (utf8 == NULL) {
-		/* LCOV_EXCL_START */
-		ERR("%s\n", error->message);
-		g_error_free(error);
+	remaining = (size_t)(dest_size - 1);
 
-		dest[0] = '\0';
-		items_written = 0;
-		/* LCOV_EXCL_STOP */
-	} else {
-		g_strlcpy(dest, (char *)utf8, dest_size);
-		g_free(utf8);
+	while (cursor && *cursor) {
+		mtp_uint32 codepoint = __utf16_next_codepoint(&cursor);
+		char encoded[4];
+		size_t len;
+
+		if (codepoint == 0)
+			break;
+
+		len = __utf8_encode_codepoint(codepoint, encoded);
+		if (len > remaining)
+			break;
+
+		memcpy(out, encoded, len);
+		out += len;
+		remaining -= len;
+		written += (mtp_int32)len;
 	}
 
-	return (mtp_int32)items_written;
+	*out = '\0';
+	return written;
 }
 
 /*
@@ -108,30 +241,35 @@ mtp_int32 _util_utf16_to_utf8(char *dest, mtp_int32 dest_size,
 mtp_int32 _util_utf8_to_utf16(mtp_wchar *dest, mtp_int32 dest_items,
 		const char *src)
 {
-	GError *error = NULL;
-	glong items_read = 0;
-	gunichar2 *utf16 = NULL;
-	glong items_written = 0;
+	const char *cursor = src;
+	mtp_int32 written = 0;
 
-	retv_if(src == NULL, 0);
 	retv_if(dest == NULL, 0);
+	retv_if(dest_items <= 0, 0);
+	dest[0] = (mtp_wchar)'\0';
+	retv_if(src == NULL, 0);
 
-	utf16 = g_utf8_to_utf16(src, -1, &items_read, &items_written, &error);
-	if (utf16 == NULL) {
-		/* LCOV_EXCL_START */
-		ERR("%s\n", error->message);
-		g_error_free(error);
-		error = NULL;
+	while (cursor && *cursor) {
+		mtp_uint32 codepoint = __utf8_next_codepoint(&cursor);
 
-		dest[0] = (mtp_wchar)'\0';
-		items_written = 0;
-		/* LCOV_EXCL_STOP */
-	} else {
-		_util_wchar_ncpy(dest, utf16, dest_items);
-		g_free(utf16);
+		if (codepoint == 0)
+			break;
+
+		if (codepoint <= 0xFFFF) {
+			if (written >= dest_items - 1)
+				break;
+			dest[written++] = (mtp_wchar)codepoint;
+		} else {
+			if (written >= dest_items - 2)
+				break;
+			codepoint -= 0x10000;
+			dest[written++] = (mtp_wchar)(0xD800 | ((codepoint >> 10) & 0x3FF));
+			dest[written++] = (mtp_wchar)(0xDC00 | (codepoint & 0x3FF));
+		}
 	}
 
-	return (mtp_int32)items_written;
+	dest[written] = (mtp_wchar)'\0';
+	return written;
 }
 
 
@@ -147,7 +285,7 @@ void _util_wchar_cpy(mtp_wchar *dest, const mtp_wchar *src)
 	ret_if(src == NULL);
 	ret_if(dest == NULL);
 
-	if (!((int)dest & 0x1) && !((int)src & 0x1)) {
+	if (!((uintptr_t)dest & 0x1) && !((uintptr_t)src & 0x1)) {
 		/* 2-byte aligned */
 		mtp_wchar *temp = dest;
 
@@ -184,7 +322,7 @@ void _util_wchar_ncpy(mtp_wchar *dest, const mtp_wchar *src, unsigned long n)
 	ret_if(src == NULL);
 	ret_if(dest == NULL);
 
-	if (!((int)dest & 0x1) && !((int)src & 0x1)) {	/* 2-byte aligned */
+	if (!((uintptr_t)dest & 0x1) && !((uintptr_t)src & 0x1)) {	/* 2-byte aligned */
 		temp = dest;
 
 		while (n && (*temp++ = *src++))
@@ -222,7 +360,7 @@ void _util_wchar_ncpy(mtp_wchar *dest, const mtp_wchar *src, unsigned long n)
  */
 size_t _util_wchar_len(const mtp_wchar *s)
 {
-	if (!((int)s & 0x1)) {	/* 2-byte aligned */
+	if (!((uintptr_t)s & 0x1)) {	/* 2-byte aligned */
 		mtp_wchar *temp = (mtp_wchar *)s;
 
 		while (*temp++)
@@ -523,7 +661,11 @@ void _util_conv_wstr_to_guid(mtp_wchar *wstr, mtp_uint64 *guid)
 		count++;
 
 	memset(guid, 0, sizeof(temp));
-	skip_idx = sizeof(temp) / sizeof(mtp_wchar);
+	{
+		size_t chunk_bytes = sizeof(temp);
+		size_t wchar_bytes = sizeof(mtp_wchar);
+		skip_idx = (mtp_uint32)(chunk_bytes / wchar_bytes);
+	}
 
 	for (cur_idx = 0; cur_idx < count; cur_idx += skip_idx) {
 

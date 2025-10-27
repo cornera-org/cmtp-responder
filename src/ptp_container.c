@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <glib.h>
 #include "ptp_container.h"
 #include "ptp_datacodes.h"
 #include "mtp_transport.h"

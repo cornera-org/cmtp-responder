@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-#include <glib.h>
+#include <stdint.h>
+
 #include "mtp_property.h"
 #include "mtp_support.h"
 #include "mtp_transport.h"
@@ -506,9 +507,9 @@ void _prop_copy_char_to_ptpstring(ptp_string_t *pstring, void *str,
 
 /* LCOV_EXCL_START */
 void _prop_copy_time_to_ptptimestring(ptp_time_string_t *pstring,
-		system_time_t *sys_time)
+	system_time_t *sys_time)
 {
-	char time[17] = { 0 };
+	char time_buf[32] = { 0 };
 
 	if (sys_time == NULL) {
 		pstring->num_chars = 0;
@@ -521,15 +522,59 @@ void _prop_copy_time_to_ptptimestring(ptp_time_string_t *pstring,
 				sys_time->minute, sys_time->second,
 				(sys_time->millisecond) / 100);
 #else
-		g_snprintf(time, sizeof(time), "%04d%02d%02dT%02d%02d%02d.%01d",
-				sys_time->year, sys_time->month, sys_time->day,
-				sys_time->hour, sys_time->minute,
-				sys_time->second, (sys_time->millisecond) / 100);
+		int year = sys_time->year;
+		int month = sys_time->month;
+		int day = sys_time->day;
+		int hour = sys_time->hour;
+		int minute = sys_time->minute;
+		int second = sys_time->second;
+		int fraction = sys_time->millisecond / 100;
 
-		_util_utf8_to_utf16(pstring->str, sizeof(pstring->str) / WCHAR_SIZ, time);
+		if (year < 0)
+			year = 0;
+		else if (year > 9999)
+			year = 9999;
+
+		if (month < 0)
+			month = 0;
+		else if (month > 99)
+			month = 99;
+
+		if (day < 0)
+			day = 0;
+		else if (day > 99)
+			day = 99;
+
+		if (hour < 0)
+			hour = 0;
+		else if (hour > 99)
+			hour = 99;
+
+		if (minute < 0)
+			minute = 0;
+		else if (minute > 99)
+			minute = 99;
+
+		if (second < 0)
+			second = 0;
+		else if (second > 99)
+			second = 99;
+
+		if (fraction < 0)
+			fraction = 0;
+		else if (fraction > 9)
+			fraction = 9;
+
+		g_snprintf(time_buf, sizeof(time_buf), "%04d%02d%02dT%02d%02d%02d.%01d",
+				year, month, day, hour, minute, second, fraction);
+
+	_util_utf8_to_utf16(pstring->str, sizeof(pstring->str) / WCHAR_SIZ, time_buf);
 #endif
-		pstring->num_chars = 17;
-		pstring->str[17] = '\0';
+		size_t len = strlen(time_buf);
+		if (len >= MAX_PTP_TIME_STRING_CHARS)
+			len = MAX_PTP_TIME_STRING_CHARS - 1;
+		pstring->num_chars = (mtp_uchar)(len + 1);
+		pstring->str[len] = '\0';
 	}
 }
 /* LCOV_EXCL_STOP */
@@ -681,7 +726,8 @@ mtp_bool _prop_is_valid_integer(prop_info_t *prop_info, mtp_uint64 value)
 		mtp_uint32 ii;
 		for (ii = 0; ii < prop_info->supp_value_list.nnodes;
 				ii++, node = node->link) {
-			if (value == (mtp_uint32) node->value)
+			const mtp_uint64 node_val = (mtp_uint64)(uintptr_t)node->value;
+			if (value == node_val)
 				return TRUE;
 		/* LCOV_EXCL_STOP */
 		}
@@ -1419,7 +1465,7 @@ mtp_uint32 _prop_pack_obj_prop_desc(obj_prop_desc_t *prop, mtp_uchar *buf,
 					ii < prop->propinfo.supp_value_list.nnodes;
 					ii++, node = node->link) {
 
-				value = (mtp_uint32)node->value;
+				value = (mtp_uint32)(uintptr_t)node->value;
 				memcpy(temp, &value, prop->propinfo.dts_size);
 #ifdef __BIG_ENDIAN__
 				_util_conv_byte_order(temp, prop->propinfo.dts_size);
@@ -1722,7 +1768,7 @@ mtp_bool _prop_add_supp_integer_val(prop_info_t *prop_info, mtp_uint32 value)
 	}
 
 	/* Create the node and append it. */
-	_util_add_node(&(prop_info->supp_value_list), (void *)value);
+	_util_add_node(&(prop_info->supp_value_list), (void *)(uintptr_t)value);
 
 	return TRUE;
 }

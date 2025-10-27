@@ -22,6 +22,7 @@ extern "C" {
 #endif
 
 #include <dirent.h>
+#include <time.h>
 #include "mtp_datatype.h"
 #include "mtp_config.h"
 

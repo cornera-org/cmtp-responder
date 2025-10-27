@@ -16,7 +16,6 @@
  */
 
 #include <unistd.h>
-#include <glib.h>
 #include "mtp_config.h"
 #include "mtp_transport.h"
 #include "mtp_support.h"

@@ -12,7 +12,7 @@ actions:
     variant: minbase
 
   - action: apt
-    packages: [ sudo, openssh-server, adduser, systemd-sysv, systemd-resolved, gpgv2, udev, vim, libconfig9, libglib2.0-0, net-tools, iproute2, iputils-ping, console-setup ]
+    packages: [ sudo, openssh-server, adduser, systemd-sysv, systemd-resolved, gpgv2, udev, vim, libconfig9, net-tools, iproute2, iputils-ping, console-setup ]
 
   - action: run
     chroot: true
@@ -35,7 +35,7 @@ actions:
     command: useradd --comment "cmtp-responder" --create-home --shell /bin/bash cmtp-responder && echo "cmtp-responder:cmtp-responder" | chpasswd && adduser cmtp-responder sudo
 
   - action: apt
-    packages: [ gvfs, libmtp9, mtp-tools, gvfs-backends, gvfs-fuse, libglib2.0-bin, git, bats, usbutils ]
+    packages: [ gvfs, libmtp9, mtp-tools, gvfs-backends, gvfs-fuse, git, bats, usbutils ]
 
   - action: image-partition
     imagename: {{ $image }}

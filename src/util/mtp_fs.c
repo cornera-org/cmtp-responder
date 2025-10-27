@@ -24,8 +24,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
-#include <glib.h>
-#include <glib/gprintf.h>
+#include <errno.h>
+#include <stdarg.h>
+#include <string.h>
+
+#ifndef SRC_PATH_LEN
+#define SRC_PATH_LEN 0
+#endif
 #include "mtp_fs.h"
 #include "mtp_util.h"
 #include "mtp_support.h"
@@ -199,12 +204,21 @@ mtp_bool _util_file_copy(const mtp_char *origpath, const mtp_char *newpath,
 }
 
 /*
- * A temporary wrapper to localize the warning about readdir_r usage.
- * To be replaced by readdir_r emulated with readdir.
+ * A tiny wrapper mimicking readdir_r semantics using readdir(3).
+ * Returns 0 on success, errno on failure, and NULL result at end-of-directory.
  */
 static inline int do_readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result)
 {
-	return readdir_r(dirp, entry, result);
+	struct dirent *temp;
+	errno = 0;
+	temp = readdir(dirp);
+	if (temp == NULL) {
+		*result = NULL;
+		return errno;
+	}
+	memcpy(entry, temp, sizeof(*entry));
+	*result = entry;
+	return 0;
 }
 
 mtp_bool _util_copy_dir_children_recursive(const mtp_char *origpath,
@@ -629,7 +643,7 @@ mtp_bool _util_ifind_next(mtp_char *dir_name, DIR *dirp, dir_entry_t *dir_info)
 	do {
 		ret = do_readdir_r(dirp, &entry, &result);
 		if (ret != 0) {
-			ERR("do_readdir_r Fail : %d\n", ret);
+			ERR("do_readdir Fail : %d\n", ret);
 			return FALSE;
 		} else if (result == NULL) {
 			DBG("There is no more entry\n");

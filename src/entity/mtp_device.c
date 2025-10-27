@@ -16,7 +16,6 @@
  */
 
 #include <unistd.h>
-#include <glib.h>
 #include "mtp_support.h"
 #include "mtp_util.h"
 #include "ptp_datacodes.h"

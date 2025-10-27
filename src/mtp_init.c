@@ -18,8 +18,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/syscall.h>
-#include <glib.h>
-#include <glib-object.h>
+#include <pthread.h>
 #include <malloc.h>
 #include "mtp_init.h"
 #include "mtp_config.h"
@@ -47,11 +46,36 @@ mtp_config_t g_conf;
 /*
  * STATIC VARIABLES
  */
-static GMainLoop *g_mainloop = NULL;
+static pthread_mutex_t g_mainloop_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_mainloop_cond = PTHREAD_COND_INITIALIZER;
+static mtp_bool g_mainloop_running = FALSE;
 static mtp_mgr_t *g_mgr = &g_mtp_mgr;
 /*
  * FUNCTIONS
  */
+
+static void __main_loop_start(void)
+{
+	pthread_mutex_lock(&g_mainloop_mutex);
+	g_mainloop_running = TRUE;
+	pthread_mutex_unlock(&g_mainloop_mutex);
+}
+
+static void __main_loop_quit(void)
+{
+	pthread_mutex_lock(&g_mainloop_mutex);
+	g_mainloop_running = FALSE;
+	pthread_cond_broadcast(&g_mainloop_cond);
+	pthread_mutex_unlock(&g_mainloop_mutex);
+}
+
+static void __main_loop_run(void)
+{
+	pthread_mutex_lock(&g_mainloop_mutex);
+	while (g_mainloop_running)
+		pthread_cond_wait(&g_mainloop_cond, &g_mainloop_mutex);
+	pthread_mutex_unlock(&g_mainloop_mutex);
+}
 
 /* LCOV_EXCL_START */
 static void __print_mtp_conf(void)
@@ -278,7 +302,7 @@ static void __mtp_exit(void)
 
 	DBG("## Terminate main loop\n");
 
-	g_main_loop_quit(g_mainloop);
+	__main_loop_quit();
 
 	if (g_eh_thrd == pthread_self())
 		_util_thread_exit("Event handler stopped itself");
@@ -329,6 +353,7 @@ void _mtp_init(void)
 
 	__read_mtp_conf();
 
+#if defined(__GLIBC__) && defined(M_MMAP_THRESHOLD) && defined(M_TRIM_THRESHOLD)
 	if (g_conf.mmap_threshold) {
 		if (!mallopt(M_MMAP_THRESHOLD, g_conf.mmap_threshold))
 			ERR("mallopt(M_MMAP_THRESHOLD) Fail\n");
@@ -336,6 +361,7 @@ void _mtp_init(void)
 		if (!mallopt(M_TRIM_THRESHOLD, g_conf.mmap_threshold * 2))
 			ERR("mallopt(M_TRIM_THRESHOLD) Fail\n");
 	}
+#endif
 
 	__init_mtp_info();
 
@@ -429,8 +455,7 @@ static inline int _main_init()
 	retvm_if(!_eh_handle_usb_events(USB_INSERTED), MTP_ERROR_GENERAL,
 		"_eh_handle_usb_events() Fail\n");
 
-	g_mainloop = g_main_loop_new(NULL, FALSE);
-	retvm_if(!g_mainloop, MTP_ERROR_GENERAL, "g_mainloop is NULL\n");
+	__main_loop_start();
 
 	return MTP_ERROR_NONE;
 }
@@ -451,7 +476,7 @@ int main(int argc, char *argv[])
 
 	DBG("MTP UID = [%u] and GID = [%u]\n", getuid(), getgid());
 
-	g_main_loop_run(g_mainloop);
+	__main_loop_run();
 
 	DBG("######### MTP TERMINATED #########\n");
 

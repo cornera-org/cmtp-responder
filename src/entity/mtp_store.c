@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-#include <glib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <dirent.h>

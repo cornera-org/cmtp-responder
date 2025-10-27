@@ -34,9 +34,7 @@ RUN apt-get update && \
 	apt-get -y upgrade && apt-get -y dist-upgrade && \
 	apt-get -y install gcc \
 		g++ \
-		libconfig-dev \
-		libglib2.0-dev \
-		libsystemd-dev
+		libconfig-dev
 RUN apt-get -y install asciidoc-base
 WORKDIR /opt/src/libusbgx
 RUN ./configure --prefix=/usr && \
@@ -51,9 +49,7 @@ RUN dpkg --add-architecture armhf && apt-get update && \
 	apt-get -y upgrade && apt-get -y dist-upgrade && \
 	apt-get -y install gcc-arm-linux-gnueabihf \
 		g++-arm-linux-gnueabihf \
-		libconfig-dev:armhf \
-		libglib2.0-dev:armhf \
-		libsystemd-dev:armhf
+		libconfig-dev:armhf
 RUN apt-get -y install asciidoc-base
 WORKDIR /opt/src/libusbgx
 RUN PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig ./configure --host=arm-linux-gnueabihf --prefix=/usr/arm-linux-gnueabihf && \
@@ -70,9 +66,7 @@ RUN dpkg --add-architecture arm64 && apt-get update && \
 	apt-get -y upgrade && apt-get -y dist-upgrade && \
 	apt-get -y install gcc-aarch64-linux-gnu \
 		g++-aarch64-linux-gnu \
-		libconfig-dev:arm64 \
-		libglib2.0-dev:arm64 \
-		libsystemd-dev:arm64
+		libconfig-dev:arm64
 RUN apt-get -y install asciidoc-base
 WORKDIR /opt/src/libusbgx
 RUN PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig ./configure --host=aarch64-linux-gnu --prefix=/usr/aarch64-linux-gnu && \

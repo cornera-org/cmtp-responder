@@ -22,14 +22,12 @@
 #include <fcntl.h>
 #include <time.h>
 #include <pthread.h>
+#include <string.h>
 #include "mtp_util.h"
 #include "mtp_support.h"
 #include "mtp_fs.h"
 #include <sys/stat.h>
-#include <systemd/sd-login.h>
-#include <sys/types.h>
 //#include <grp.h>
-#include <glib.h>
 #include <pwd.h>
 #include <poll.h>
 
@@ -51,7 +49,7 @@ void _util_print_error()
 void _util_get_external_path(char *external_path)
 {
 /* LCOV_EXCL_START */
-	strncpy(external_path, MTP_EXTERNAL_PATH_CHAR, sizeof(MTP_EXTERNAL_PATH_CHAR));
-	external_path[sizeof(MTP_EXTERNAL_PATH_CHAR) - 1] = 0;
+	ret_if(external_path == NULL);
+	g_strlcpy(external_path, MTP_EXTERNAL_PATH_CHAR, MTP_MAX_PATHNAME_SIZE + 1);
 }
 /* LCOV_EXCL_STOP */

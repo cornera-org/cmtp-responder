@@ -15,11 +15,15 @@
  * limitations under the License.
  */
 
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
-#include <glib.h>
 #include "mtp_fs.h"
 #include "mtp_support.h"
 #include "mtp_util.h"

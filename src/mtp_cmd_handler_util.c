@@ -16,8 +16,6 @@
  */
 
 #include <unistd.h>
-#include <glib.h>
-#include <glib/gprintf.h>
 #include "mtp_cmd_handler.h"
 #include "mtp_cmd_handler_util.h"
 #include "mtp_support.h"

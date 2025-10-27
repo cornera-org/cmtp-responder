@@ -18,7 +18,6 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <signal.h>
-#include <glib.h>
 #include "mtp_event_handler.h"
 #include "mtp_cmd_handler.h"
 #include "mtp_util.h"

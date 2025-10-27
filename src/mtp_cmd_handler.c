@@ -22,8 +22,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <glib.h>
-#include <glib/gprintf.h>
 #include "mtp_support.h"
 #include "ptp_datacodes.h"
 #include "mtp_usb_driver.h"

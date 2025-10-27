@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include <glib.h>
 #include "mtp_list.h"
 
 /*

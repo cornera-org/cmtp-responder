@@ -18,18 +18,6 @@ ADD_DEFINITIONS("-DMTP_CONFIG_FILE_PATH=\"${CONFPATH}\"")
 string(LENGTH "${CMAKE_SOURCE_DIR}/" SRC_PATH_LEN)
 add_definitions("-DSRC_PATH_LEN=${SRC_PATH_LEN}")
 
-SET(PKG_MODULES
-	glib-2.0
-	libsystemd
-)
-
-INCLUDE(FindPkgConfig)
-pkg_check_modules(pkgs REQUIRED ${PKG_MODULES})
-
-FOREACH(flag ${pkgs_CFLAGS})
-	SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
-ENDFOREACH(flag)
-
 SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} -Wall -Werror=implicit-function-declaration")
 SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} -fexceptions -fvisibility=hidden -fprofile-arcs -ftest-coverage")
 
@@ -46,7 +34,6 @@ TARGET_LINK_LIBRARIES(${PROJECT_NAME}
 	entity
 	transport
 	util
-	${pkgs_LDFLAGS}
 	pthread
 	rt
 )
