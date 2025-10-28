@@ -5,6 +5,7 @@ PROJECT(cmtp-responder C)
 include(GNUInstallDirs)
 
 OPTION(BUILD_DESCRIPTORS "Build USB descriptors binary blobs" OFF)
+OPTION(INSTALL_DINIT_SERVICES "Install Dinit service definitions" OFF)
 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include)
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/include/entity)
@@ -41,6 +42,21 @@ TARGET_LINK_LIBRARIES(${PROJECT_NAME}
 INSTALL(FILES ${CONFFILE} DESTINATION ${CONFDIR})
 
 INSTALL(TARGETS ${PROJECT_NAME} RUNTIME)
+
+IF (INSTALL_DINIT_SERVICES)
+	SET(DINIT_DESTINATION "${CMAKE_INSTALL_FULL_SYSCONFDIR}/dinit.d")
+	INSTALL(FILES
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/usb-gadget.service
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/run-ffs_mtp.service
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/ffs-populate.service
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/ffs-enable.service
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/functionfs-daemon.service
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/mtp-ffs.target
+		DESTINATION ${DINIT_DESTINATION})
+
+	INSTALL(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/scripts/ffs-populate.sh
+		DESTINATION ${CMAKE_INSTALL_FULL_LIBEXECDIR}/cmtp-responder)
+ENDIF ()
 
 IF (BUILD_DESCRIPTORS)
 	ADD_EXECUTABLE(extract_descs_strs ${CMAKE_SOURCE_DIR}/src/extract_descs/mtp_extract_descs_strs.c
