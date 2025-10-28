@@ -34,6 +34,7 @@
 
 static phone_state_t _g_ph_status = { 0 };
 phone_state_t *g_ph_status = &_g_ph_status;
+extern mtp_config_t g_conf;
 
 /* LCOV_EXCL_START */
 void _util_print_error()
@@ -50,6 +51,8 @@ void _util_get_external_path(char *external_path)
 {
 /* LCOV_EXCL_START */
 	ret_if(external_path == NULL);
-	g_strlcpy(external_path, MTP_EXTERNAL_PATH_CHAR, MTP_MAX_PATHNAME_SIZE + 1);
+	const char *configured_path = g_conf.external_path[0] ?
+		g_conf.external_path : MTP_EXTERNAL_PATH_CHAR;
+	g_strlcpy(external_path, configured_path, MTP_MAX_PATHNAME_SIZE + 1);
 }
 /* LCOV_EXCL_STOP */

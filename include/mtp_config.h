@@ -19,6 +19,7 @@
 #define _MTP_CONFIG_H_
 
 #include <stdbool.h>
+#include <stddef.h>
 
 /* Set write-protection for read-only files */
 /*#define MTP_SUPPORT_SET_PROTECTION*/
@@ -136,6 +137,8 @@ typedef struct {
 	/* Speed related config (End) */
 
 	/* MTP Features */
+	char external_path[MTP_MAX_PATHNAME_SIZE + 1];
+	size_t external_path_len;
 	/* MTP Features (End) */
 
 	/* Vendor Features */

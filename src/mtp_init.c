@@ -20,6 +20,8 @@
 #include <sys/syscall.h>
 #include <pthread.h>
 #include <malloc.h>
+#include <ctype.h>
+#include <string.h>
 #include "mtp_init.h"
 #include "mtp_config.h"
 #include "mtp_thread.h"
@@ -97,7 +99,8 @@ static void __print_mtp_conf(void)
 	DBG("INHERITSCHED : %c\n", g_conf.inheritsched);
 	DBG("SCHEDPOLICY : %c\n", g_conf.schedpolicy);
 	DBG("FILE_SCHEDPARAM: %d\n", g_conf.file_schedparam);
-	DBG("USB_SCHEDPARAM: %d\n\n", g_conf.usb_schedparam);
+	DBG("USB_SCHEDPARAM: %d\n", g_conf.usb_schedparam);
+	DBG("EXTERNAL_PATH: %s\n\n", g_conf.external_path);
 }
 
 static void __read_mtp_conf(void)
@@ -123,6 +126,10 @@ static void __read_mtp_conf(void)
 
 	g_conf.max_io_buf_size = MTP_MAX_IO_BUF_SIZE;
 	g_conf.read_file_delay = MTP_READ_FILE_DELAY;
+
+	g_strlcpy(g_conf.external_path, MTP_EXTERNAL_PATH_CHAR,
+		sizeof(g_conf.external_path));
+	g_conf.external_path_len = strlen(g_conf.external_path);
 
 	if (MTP_SUPPORT_PTHREAD_SCHED) {
 		g_conf.support_pthread_sched = MTP_SUPPORT_PTHREAD_SCHED;
@@ -272,6 +279,31 @@ static void __read_mtp_conf(void)
 
 			g_conf.usb_schedparam = atoi(token);
 		/* LCOV_EXCL_STOP */
+		} else if (strcasecmp(token, "storage_path") == 0) {
+			token = strtok_r(NULL, "=", &saveptr);
+			if (token == NULL)
+				continue;	// LCOV_EXCL_LINE
+
+			while (*token == ' ' || *token == '\t')
+				token++;
+
+			size_t len = strlen(token);
+			while (len > 0 && isspace((unsigned char)token[len - 1])) {
+				token[--len] = '\0';
+			}
+
+			if (len == 0)
+				continue;	// LCOV_EXCL_LINE
+
+			if (len >= sizeof(g_conf.external_path)) {
+				DBG("storage_path too long, truncating to %zu characters\n",
+					sizeof(g_conf.external_path) - 1);
+			}
+
+			g_strlcpy(g_conf.external_path, token,
+				sizeof(g_conf.external_path));
+			g_conf.external_path_len = strlen(g_conf.external_path);
+		/* LCOV_EXCL_STOP */
 		} else {
 			ERR("Unknown option : %s\n", buf);
 		}
@@ -419,6 +451,10 @@ void _mtp_deinit(void)
 	/* initialize MTP_USE_FILE_BUFFER*/
 	g_free(g_mgr->ftemp_st.temp_buff);
 	g_mgr->ftemp_st.temp_buff = NULL;
+
+	g_conf.external_path[0] = '\0';
+	g_conf.external_path_len = 0;
+	g_conf.is_init = false;
 
 #ifdef MTP_SUPPORT_OBJECTADDDELETE_EVENT
 	_inoti_deinit_filesystem_events();
