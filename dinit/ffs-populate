@@ -7,8 +7,8 @@
 # path below).
 
 type = scripted
-command = ffs-populate.sh populate
-stop-command = ffs-populate.sh cleanup
+command = /usr/libexec/cmtp-responder/ffs-populate.sh populate
+stop-command = /usr/libexec/cmtp-responder/ffs-populate.sh cleanup
 # Ensure the FunctionFS filesystem is mounted before copying data.
 depends-on = run-ffs_mtp
 waits-for = run-ffs_mtp

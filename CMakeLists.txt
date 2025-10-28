@@ -49,12 +49,12 @@ INSTALL(TARGETS ${PROJECT_NAME} RUNTIME)
 IF (INSTALL_DINIT_SERVICES)
 	SET(DINIT_DESTINATION "${CMAKE_INSTALL_FULL_SYSCONFDIR}/dinit.d")
 	INSTALL(FILES
-		${CMAKE_CURRENT_SOURCE_DIR}/dinit/usb-gadget.service
-		${CMAKE_CURRENT_SOURCE_DIR}/dinit/run-ffs_mtp.service
-		${CMAKE_CURRENT_SOURCE_DIR}/dinit/ffs-populate.service
-		${CMAKE_CURRENT_SOURCE_DIR}/dinit/ffs-enable.service
-		${CMAKE_CURRENT_SOURCE_DIR}/dinit/functionfs-daemon.service
-		${CMAKE_CURRENT_SOURCE_DIR}/dinit/mtp-ffs.target
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/usb-gadget
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/run-ffs_mtp
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/ffs-populate
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/ffs-enable
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/functionfs-daemon
+		${CMAKE_CURRENT_SOURCE_DIR}/dinit/mtp-ffs
 		DESTINATION ${DINIT_DESTINATION})
 
 	INSTALL(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/dinit/ffs-populate.sh
