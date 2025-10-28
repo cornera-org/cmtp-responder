@@ -1,0 +1,16 @@
+# Load the USB gadget scheme used by the MTP FunctionFS stack.
+#
+# systemd equivalent: systemd/usb-gadget.service
+# Requirements: sys-kernel-config.mount must already be active so that
+# the gadget tree under /sys/kernel/config is writable.
+
+type = scripted
+command = /usr/bin/gt load -o mtp-ffs.scheme mtp-ffs
+stop-command = /usr/bin/gt rm -rf mtp-ffs
+# Ensure the configfs mount is up before we try to load the gadget.
+depends-on = sys-kernel-config.mount
+waits-for = sys-kernel-config.mount
+# Provide aliases matching the systemd target and shorthand name so that
+# dependents can use either spelling.
+provides = usb-gadget
+provides = usb-gadget.target

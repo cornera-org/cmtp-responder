@@ -1,0 +1,15 @@
+# Mount the FunctionFS instance exposed at /run/ffs_mtp.
+#
+# systemd equivalent: systemd/run-ffs_mtp.mount
+# This is modelled as a scripted (one-shot) service: mounting succeeds
+# when the command completes, and the mount is removed during shutdown.
+
+type = scripted
+command = /usr/bin/mount -t functionfs -o defaults mtp /run/ffs_mtp
+stop-command = /usr/bin/umount /run/ffs_mtp
+# The FunctionFS mount requires the gadget definition to be loaded first.
+depends-on = usb-gadget
+waits-for = usb-gadget.target
+# Match the systemd TimeoutSec=5 behaviour.
+start-timeout = 5s
+provides = run-ffs_mtp.mount

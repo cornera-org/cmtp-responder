@@ -1,0 +1,14 @@
+# Populate FunctionFS descriptor and string files.
+#
+# systemd equivalent: USBFunctionDescriptors=/USBFunctionStrings= options
+# on systemd/functionfs-daemon.service. The heavy lifting is done by the
+# helper script in scripts/ffs-populate.sh (install it to
+# ffs-populate.sh or adjust the command
+# path below).
+
+type = scripted
+command = ffs-populate.sh populate
+stop-command = ffs-populate.sh cleanup
+# Ensure the FunctionFS filesystem is mounted before copying data.
+depends-on = run-ffs_mtp
+waits-for = run-ffs_mtp

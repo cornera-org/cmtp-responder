@@ -1,0 +1,10 @@
+# Aggregate service matching the original usb-gadget.target in systemd.
+# Enabling this target will ensure the complete FunctionFS/MTP stack is
+# activated.
+
+type = internal
+depends-on = usb-gadget
+depends-on = run-ffs_mtp
+depends-on = ffs-populate
+depends-on = ffs-enable
+depends-on = functionfs-daemon

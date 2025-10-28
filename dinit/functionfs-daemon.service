@@ -1,0 +1,15 @@
+# Run the cmtp-responder daemon once the gadget stack is ready.
+#
+# systemd equivalent: systemd/functionfs-daemon.service
+# systemd-specific USBFunctionDescriptors/Strings settings are emulated
+# by dinit/ffs-populate.service, which mirrors the data into the
+# FunctionFS mount before we enable endpoints.
+
+type = process
+command = /usr/bin/cmtp-responder
+restart = yes
+restart-delay = 3s
+# Require the FunctionFS stack to be fully prepared first.
+depends-on = ffs-enable
+depends-on = run-ffs_mtp
+waits-for = ffs-enable

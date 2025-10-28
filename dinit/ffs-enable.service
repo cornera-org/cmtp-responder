@@ -1,0 +1,12 @@
+# Enable the gadget endpoints once FunctionFS is mounted.
+#
+# systemd reference: ExecStartPost in systemd/ffs.socket
+# and the socket activation block. Dinit lacks FunctionFS-aware socket
+# units, so we trigger the equivalent enable step explicitly as a
+# one-shot service.
+
+type = scripted
+command = /usr/bin/gt enable mtp-ffs
+# Ensure FunctionFS is populated before enabling endpoints.
+depends-on = ffs-populate
+waits-for = ffs-populate
